@@ -14,8 +14,9 @@ Lógica:
 4. Score máximo: 10.0
 """
 
-import pytest
 from dataclasses import dataclass
+
+import pytest
 
 
 # =============================================================================
