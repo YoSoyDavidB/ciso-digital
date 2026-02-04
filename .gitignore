@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.env
+.env*
+venv/
+.envrc
+
+# VSCode
+.vscode/
+
+# MacOS
+.DS_Store
+
+# Test/coverage
+.coverage
+htmlcov/
+*.cover
+*.py,cover
+.cache/
+
+# Migrations
+migrations/
+
+# Logs
+*.log
+
+# Jupyter
+*.ipynb_checkpoints
+
+# Docker
+*.pid
+docker-compose.override.yml
+
+# Node
+node_modules/
+
+# Others
+*.sqlite3
+*.db
+*.bak
+*.swp
+*.swo
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# System
+Thumbs.db
