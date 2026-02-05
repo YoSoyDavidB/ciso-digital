@@ -13,10 +13,13 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+# Importaciones de modelos
+from app.shared.models import Base
+
 
 # Importaciones que se habilitarán cuando existan los módulos
 # from app.main import app
-# from app.database import Base, get_db
+# from app.database import get_db
 
 
 # =============================================================================
@@ -59,15 +62,15 @@ async def db_engine():
         echo=False,
     )
 
-    # Cuando tengamos modelos, crear las tablas:
-    # async with engine.begin() as conn:
-    #     await conn.run_sync(Base.metadata.create_all)
+    # Crear las tablas
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
     yield engine
 
     # Cleanup
-    # async with engine.begin() as conn:
-    #     await conn.run_sync(Base.metadata.drop_all)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
 
     await engine.dispose()
 
@@ -110,27 +113,21 @@ async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, 
             response = await async_client.get("/api/v1/health")
             assert response.status_code == 200
     """
-    # Importación diferida - se habilitará cuando exista app.main
-    # from app.main import app
-    # from app.database import get_db
+    from app.core.database import get_db
+    from app.main import app
 
-    # Override de dependencia de DB
-    # async def override_get_db():
-    #     yield db_session
+    # Override de dependencia de DB para usar la db de test
+    async def override_get_db():
+        yield db_session
 
-    # app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_db] = override_get_db
 
-    # Por ahora, placeholder hasta que tengamos la app
-    # async with AsyncClient(
-    #     transport=ASGITransport(app=app),
-    #     base_url="http://test"
-    # ) as client:
-    #     yield client
+    # Crear cliente con la app de FastAPI
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        yield client
 
-    # app.dependency_overrides.clear()
-
-    # Placeholder - se reemplazará cuando exista la app
-    yield None  # type: ignore
+    # Limpiar overrides después del test
+    app.dependency_overrides.clear()
 
 
 # =============================================================================

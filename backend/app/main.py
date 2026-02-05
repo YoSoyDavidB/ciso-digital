@@ -66,7 +66,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Maneja eventos de inicio y finalización de la aplicación.
     """
     # Startup
-    logger.info("🚀 Starting CISO Digital API...")
+    logger.info("Starting CISO Digital API...")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"Debug mode: {settings.DEBUG}")
     logger.info(f"Log level: {settings.LOG_LEVEL}")
@@ -76,19 +76,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # await redis_client.connect()
     # await qdrant_client.connect()
 
-    logger.info("✅ Application startup complete")
+    logger.info("Application startup complete")
 
     yield
 
     # Shutdown
-    logger.info("🛑 Shutting down CISO Digital API...")
+    logger.info("Shutting down CISO Digital API...")
 
     # TODO: Cerrar conexiones
     # await database.disconnect()
     # await redis_client.disconnect()
     # await qdrant_client.disconnect()
 
-    logger.info("✅ Application shutdown complete")
+    logger.info("Application shutdown complete")
 
 
 # =============================================================================
@@ -143,15 +143,16 @@ def create_app() -> FastAPI:
 
     # Import routers
     from app.api.routes.health import router as health_router
+    from app.api.routes.risk import router as risk_router
 
     # Register routers
     app.include_router(health_router)
+    app.include_router(risk_router)
 
     # TODO: Agregar routers adicionales
     # app.include_router(auth_router, prefix="/api/v1")
     # app.include_router(users_router, prefix="/api/v1")
     # app.include_router(chat_router, prefix="/api/v1")
-    # app.include_router(risks_router, prefix="/api/v1")
     # app.include_router(incidents_router, prefix="/api/v1")
 
     # =========================================================================

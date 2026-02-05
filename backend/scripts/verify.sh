@@ -85,19 +85,33 @@ if [ ! -f "pyproject.toml" ]; then
     exit 1
 fi
 
-# Verificar que el venv existe
-if [ ! -d ".venv" ]; then
-    print_error "Virtual environment not found at .venv/"
+# Verificar que el venv existe (buscar .venv o venv)
+if [ -d ".venv" ]; then
+    VENV_DIR=".venv"
+elif [ -d "venv" ]; then
+    VENV_DIR="venv"
+else
+    print_error "Virtual environment not found at .venv/ or venv/"
     print_info "Run: python -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt"
     exit 1
 fi
 
-# Activar venv
-PYTHON=".venv/bin/python"
-PYTEST=".venv/bin/pytest"
-BLACK=".venv/bin/black"
-RUFF=".venv/bin/ruff"
-MYPY=".venv/bin/mypy"
+# Activar venv (detectar Windows o Unix)
+if [ -f "${VENV_DIR}/Scripts/python.exe" ]; then
+    # Windows
+    PYTHON="${VENV_DIR}/Scripts/python.exe"
+    PYTEST="${VENV_DIR}/Scripts/pytest"
+    BLACK="${VENV_DIR}/Scripts/black"
+    RUFF="${VENV_DIR}/Scripts/ruff"
+    MYPY="${VENV_DIR}/Scripts/mypy"
+else
+    # Unix/Linux/Mac
+    PYTHON="${VENV_DIR}/bin/python"
+    PYTEST="${VENV_DIR}/bin/pytest"
+    BLACK="${VENV_DIR}/bin/black"
+    RUFF="${VENV_DIR}/bin/ruff"
+    MYPY="${VENV_DIR}/bin/mypy"
+fi
 
 # =============================================================================
 # Check 1: Tests con Coverage
