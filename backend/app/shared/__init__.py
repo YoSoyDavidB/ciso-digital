@@ -60,7 +60,7 @@ utils/ (Utility Functions)
 
 Ejemplo:
     def validate_email(email: str) -> bool:
-        pattern = r'^[\w\.\-]+@[\w\.\-]+\.\w+$'
+        pattern = r'^[\\w.\\-]+@[\\w.\\-]+\\.\\w+$'
         return re.match(pattern, email) is not None
 
 exceptions/ (Custom Exceptions)

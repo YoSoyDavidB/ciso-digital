@@ -1,0 +1,49 @@
+# RISK ASSESSMENT REQUEST
+
+## ASSET DETAILS
+- ID: {asset_id}
+- Name: {asset_name}
+- Type: {asset_type}
+- Criticality: {asset_criticality}
+- Environment: {asset_environment}
+
+## VULNERABILITIES ({vulnerabilities_count})
+{vulnerabilities_list}
+
+{rag_context_section}
+
+## ASSESSMENT INSTRUCTIONS
+
+Analyze the asset and vulnerabilities above to provide a comprehensive risk assessment.
+
+Consider:
+1. **Vulnerability Severity**: CVSS scores and exploitability
+2. **Asset Criticality**: Business impact if compromised
+3. **Attack Surface**: Exposure and accessibility
+4. **Security Controls**: Existing protections mentioned in guidance
+5. **Threat Context**: Known exploits and threat actor interest
+
+Provide your assessment as a JSON object with this exact structure:
+
+```json
+{{
+    "risk_score": <float between 0.0 and 10.0>,
+    "severity": "<critical|high|medium|low|info>",
+    "recommendations": [
+        "<specific actionable recommendation 1>",
+        "<specific actionable recommendation 2>",
+        "<specific actionable recommendation 3>"
+    ],
+    "confidence": <float between 0.0 and 1.0>,
+    "reasoning": "<detailed explanation of risk score and severity>"
+}}
+```
+
+Ensure:
+- risk_score accurately reflects combined risk from all vulnerabilities
+- severity matches the risk_score range (critical: >=9.0, high: >=7.0, medium: >=4.0, low: >=1.0, info: <1.0)
+- recommendations are specific, actionable, and prioritized
+- confidence reflects certainty in the assessment
+- reasoning explains the key factors driving the risk score
+
+Respond ONLY with the JSON object, no additional text.

@@ -30,13 +30,32 @@ passlib[bcrypt]==1.7.4
 # AI / LLM Services (GitHub Copilot SDK Stack) ⭐ NEW
 # ============================================================================
 
-# Primary AI Engine: GitHub Copilot SDK (v0.1.21)
-# Provides multi-model support (Claude Sonnet 4.5, GPT-4/5, O1)
-# with type-safe tools, infinite context, and session management
+# Primary AI Engine: GitHub Copilot SDK (v0.1.21 - latest stable)
+# VENTAJA: $0 costo adicional (ya tienes suscripción GitHub Copilot)
+# AHORRO: $6,000-12,000 USD/año vs Anthropic/OpenAI directo
+# Soporta: Claude Sonnet 4.5, GPT-4.5, o1, o1-mini via single SDK
 github-copilot-sdk==0.1.21
 
-# Legacy LLM APIs (for embeddings only)
-anthropic==0.43.1  # For embeddings and fallback
-openai==1.57.4     # For embeddings
+# Embeddings para RAG (Vector Search)
+openai==1.12.0  # Para embeddings y Azure OpenAI fallback
+sentence-transformers==2.3.1  # Local embeddings fallback
+
+# Vector Database (ya incluido arriba, pero confirmado)
+# qdrant-client==1.16.2  # Ya definido en línea 20
+
+# ============================================================================
+# Observability & Logging
+# ============================================================================
+
+# Structured Logging
+structlog==24.1.0  # JSON logging with context binding
+python-json-logger==2.0.7  # JSON formatter for standard logging
+
+# Metrics & Monitoring
+prometheus-client==0.20.0  # Prometheus metrics export
+
+# Performance Testing
+pytest-benchmark==4.0.0  # Performance benchmarking for pytest
+psutil==5.9.8  # System and process utilities for memory monitoring
 
 # ============================================================================

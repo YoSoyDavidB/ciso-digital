@@ -90,19 +90,35 @@ class Settings(BaseSettings):
     )
     
     # ==========================================================================
-    # Azure OpenAI (Fallback - Optional)
+    # Azure OpenAI (Primary for Embeddings and Fallback)
     # ==========================================================================
     AZURE_OPENAI_KEY: str | None = Field(
         default=None,
-        description="Azure OpenAI API key (fallback if GitHub Copilot unavailable)",
+        description="Azure OpenAI API key",
     )
     AZURE_OPENAI_ENDPOINT: str | None = Field(
         default=None,
         description="Azure OpenAI endpoint URL",
     )
+    AZURE_OPENAI_API_VERSION: str = Field(
+        default="2024-02-01",
+        description="Azure OpenAI API version",
+    )
+    AZURE_OPENAI_EMBEDDING_DEPLOYMENT: str | None = Field(
+        default=None,
+        description="Azure OpenAI embedding deployment name",
+    )
+    AZURE_OPENAI_EMBEDDING_MODEL: str = Field(
+        default="text-embedding-3-small",
+        description="Azure OpenAI embedding model name",
+    )
+    AZURE_OPENAI_CHAT_DEPLOYMENT: str | None = Field(
+        default=None,
+        description="Azure OpenAI chat deployment name (fallback)",
+    )
     AZURE_OPENAI_DEPLOYMENT: str | None = Field(
         default=None,
-        description="Azure OpenAI deployment name",
+        description="Azure OpenAI deployment name (legacy, use specific deployments)",
     )
     
     # ==========================================================================
