@@ -77,11 +77,12 @@ Fase 6: Producción          [Semanas 21-22] ████
   - threat_intelligence
 
 **Jueves-Viernes:**
-- ✅ Configurar APIs de IA
-  - Anthropic Claude API key
-  - OpenAI API key (backup)
+- ✅ Configurar GitHub Copilot SDK y Azure OpenAI
+  - GitHub Token (auto-detectado de ~/.gitconfig o variable GITHUB_TOKEN)
+  - Azure OpenAI endpoint y API key (fallback)
   - Configurar rate limits
-  - Testing básico de embeddings
+  - Testing básico de Copilot sessions
+  - Testing de embeddings con Copilot SDK
 
 ### 2.3 Entregables Fase 0
 - [ ] Repositorio Git configurado
@@ -94,7 +95,70 @@ Fase 6: Producción          [Semanas 21-22] ████
 - ✅ Puedo conectarme a todas las bases de datos
 - ✅ N8N está corriendo y accesible
 - ✅ Qdrant tiene al menos 2 documentos indexados
-- ✅ Puedo hacer llamadas a Claude API exitosamente
+- ✅ Puedo hacer llamadas a GitHub Copilot SDK exitosamente
+- ✅ Azure OpenAI fallback configurado y probado
+
+### 2.5 Beneficios de Arquitectura con GitHub Copilot SDK
+
+**Ahorro de Costos Anual: $6,000 - $12,000 USD** 💰
+
+#### Comparación de Costos
+
+**Arquitectura Anterior (Anthropic/OpenAI directos):**
+- Claude Sonnet API: ~$500-800/mes
+- OpenAI GPT-4 (backup): ~$200-300/mes
+- Total mensual: $700-1,100
+- **Total anual: $8,400-$13,200**
+
+**Nueva Arquitectura (GitHub Copilot SDK):**
+- GitHub Copilot subscription: $10/mes o $100/año
+- Azure OpenAI (fallback ocasional): ~$20-50/mes
+- Total mensual: ~$30-60
+- **Total anual: $360-$720**
+
+**💵 Ahorro neto: $8,040-$12,480/año (93% de reducción)**
+
+#### Beneficios Técnicos Adicionales
+
+1. **Multi-Modelo desde Una SDK**
+   - Claude Sonnet 4.5 (primary)
+   - GPT-4.5, o1, o1-mini (disponibles)
+   - Cambio de modelo sin refactor de código
+
+2. **Tool Calling Nativo**
+   - No necesita librerías adicionales (sin `instructor`, sin `langchain`)
+   - Decorador `@define_tool` simple y directo
+   - Automatic tool execution por el runtime
+
+3. **Fallback Automático Incluido**
+   - Azure OpenAI integrado como backup
+   - Retry logic incorporado
+   - Session management robusto
+
+4. **Production-Ready Runtime**
+   - Probado en producción por GitHub
+   - Gestión de contexto y memoria incluida
+   - Rate limiting inteligente
+
+5. **Developer Experience Superior**
+   - Una sola configuración: `GITHUB_TOKEN`
+   - Auto-detección de credenciales
+   - Logging y debugging incorporados
+
+#### Consideraciones de Implementación
+
+- ✅ Requiere GitHub Copilot subscription (ya disponible para David)
+- ✅ Azure OpenAI configurado como fallback (uso mínimo esperado)
+- ✅ Rate limits más generosos que APIs directas
+- ✅ Caching por parte de GitHub reduce costos aún más
+- ✅ Embeddings también disponibles via Copilot SDK
+
+#### Impacto en el ROI del Proyecto
+
+Con estos ahorros, el proyecto **se paga solo en menos de 1 mes** comparado con costos de APIs tradicionales. El presupuesto liberado puede invertirse en:
+- Mejor hardware para RAG (más RAM, SSD más rápido)
+- Herramientas de seguridad adicionales
+- Licencias de integraciones premium
 
 ---
 
@@ -140,8 +204,8 @@ Fase 6: Producción          [Semanas 21-22] ████
 **Lunes-Martes:**
 - Implementar servicios core
   - services/database.py (connection pooling)
-  - services/llm_service.py (Claude API wrapper)
-  - services/embedding_service.py
+  - services/copilot_client_service.py (GitHub Copilot SDK wrapper con Azure fallback)
+  - services/embedding_service.py (usando Copilot SDK)
   - services/cache_service.py (Redis)
 
 **Miércoles:**
@@ -536,10 +600,10 @@ curl -X POST http://localhost:8000/api/v1/chat/message \
 | Riesgo | Probabilidad | Impacto | Mitigación |
 |--------|--------------|---------|------------|
 | Retrasos por complejidad subestimada | Alta | Medio | Buffer de 2 semanas en cronograma |
-| Costos de API exceden presupuesto | Media | Alto | Caching agresivo, modelos locales de fallback |
+| Costos de API exceden presupuesto | Baja | Bajo | GitHub Copilot SDK primary ($100/año), Azure fallback incluido, caching agresivo |
 | Problemas de performance RAG | Media | Alto | Benchmarking temprano, optimización continua |
 | Hallucinations en decisiones críticas | Media | Crítico | Validación humana obligatoria, confidence thresholds |
-| Cambios en APIs de LLM | Baja | Alto | Abstracción de providers, múltiples opciones |
+| Cambios en APIs de LLM | Baja | Medio | Copilot SDK abstrae providers, Azure OpenAI como fallback |
 
 ### 10.2 Plan de Contingencia
 
@@ -549,15 +613,18 @@ curl -X POST http://localhost:8000/api/v1/chat/message \
 - Mantener MVP y agentes core como prioridad
 
 **Si presupuesto de API es problema:**
-- Migrar a modelos open-source (Llama, Mistral)
-- Implementar caching más agresivo
-- Usar embeddings locales
+- ✅ Ya estamos usando la arquitectura más económica (GitHub Copilot SDK)
+- Azure OpenAI fallback solo se usa en caso de errores
+- Implementar caching más agresivo en Redis y PostgreSQL
+- Monitorear uso de Azure con alertas de presupuesto
+- Costos proyectados: **<$1,000/año total** (incluyendo hosting)
 
 **Si performance es insuficiente:**
-- Optimizar queries a Qdrant
-- Implementar caching en más niveles
-- Considerar hardware upgrade
-- Reducir complejidad de agentes
+- Optimizar queries a Qdrant (ajustar HNSW parameters)
+- Implementar caching en más niveles (Redis multi-layer)
+- Considerar hardware upgrade (más RAM para vectores)
+- Reducir complejidad de agentes (simplificar tool chains)
+- Implementar query batching para múltiples búsquedas
 
 ---
 

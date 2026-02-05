@@ -99,12 +99,22 @@ DOCUMENTOS RELEVANTES (RAG):
 ### 2.3 Flujo de Procesamiento
 
 ```python
+from copilot import CopilotClient
+
 class CISOOrchestrator:
-    def __init__(self, llm, rag_system, agents_registry):
-        self.llm = llm
+    def __init__(self, copilot_client: CopilotClient, rag_system, agents_registry):
+        self.client = copilot_client
         self.rag = rag_system
         self.agents = agents_registry
         self.conversation_memory = ConversationMemory()
+        self.classifier_session = None  # Sesión de Copilot para clasificación
+    
+    async def initialize(self):
+        """Inicializa la sesión de Copilot para el clasificador"""
+        self.classifier_session = await self.client.create_session({
+            "model": "claude-sonnet-4.5",
+            "system": ORCHESTRATOR_SYSTEM_PROMPT
+        })
     
     async def process_query(self, user_query: str, session_id: str) -> Response:
         # 1. Cargar contexto conversacional
@@ -119,7 +129,10 @@ class CISOOrchestrator:
             }
         )
         
-        # 3. Analizar intención y determinar ruta
+        # 3. Analizar intención usando Copilot session
+        if not self.classifier_session:
+            await self.initialize()
+        
         intent_analysis = await self._analyze_intent(
             query=user_query,
             context=context,
@@ -160,7 +173,7 @@ class CISOOrchestrator:
         return validated_response
     
     async def _analyze_intent(self, query, context, rag_docs):
-        """Analiza la intención del usuario y determina routing"""
+        """Analiza la intención del usuario usando GitHub Copilot SDK"""
         
         analysis_prompt = f"""
         Analiza la siguiente consulta y determina:
@@ -183,8 +196,10 @@ class CISOOrchestrator:
         }}
         """
         
-        analysis = await self.llm.generate(analysis_prompt, response_format="json")
-        return IntentAnalysis(**analysis)
+        # Usar sesión de Copilot para clasificación
+        response = await self.classifier_session.chat(analysis_prompt)
+        analysis_data = json.loads(response.text)
+        return IntentAnalysis(**analysis_data)
     
     async def _multi_agent_execution(self, query, agents_needed, context, rag_docs):
         """Ejecuta múltiples agentes en secuencia o paralelo según necesidad"""
@@ -1219,10 +1234,13 @@ proactive_agent.send_gap_notification(
 ### 7.1 Pipeline RAG Completo
 
 ```python
+from copilot import CopilotClient
+
 class AdvancedRAGSystem:
-    def __init__(self, qdrant_client, embedding_model, reranker=None):
+    def __init__(self, qdrant_client, embedding_model, copilot_client: CopilotClient, reranker=None):
         self.qdrant = qdrant_client
         self.embedding_model = embedding_model
+        self.copilot = copilot_client
         self.reranker = reranker  # Cohere Rerank o similar
         
     async def search(
@@ -1235,8 +1253,8 @@ class AdvancedRAGSystem:
         enable_rerank: bool = True
     ) -> List[Document]:
         
-        # 1. Query Understanding & Expansion
-        expanded_query = await self._expand_query(query)
+        # 1. Query Understanding & Expansion usando Copilot
+        expanded_query = await self._expand_query_with_copilot(query)
         
         # 2. Generate embedding
         query_vector = self.embedding_model.embed(expanded_query)
@@ -1256,14 +1274,14 @@ class AdvancedRAGSystem:
         else:
             combined_results = vector_results
         
-        # 5. Re-ranking (opcional)
-        if enable_rerank and self.reranker:
-            reranked_results = await self.reranker.rerank(
+        # 5. Re-ranking usando GitHub Copilot SDK
+        if enable_rerank:
+            reranked_results = await self._rerank_with_copilot(
                 query=query,
-                documents=[r.payload['content'] for r in combined_results],
+                results=combined_results,
                 top_k=top_k
             )
-            final_results = [combined_results[idx] for idx in reranked_results.indices]
+            final_results = reranked_results
         else:
             final_results = combined_results[:top_k]
         
@@ -1272,21 +1290,72 @@ class AdvancedRAGSystem:
         
         return documents
     
-    async def _expand_query(self, query: str) -> str:
-        """Expande el query con sinónimos y términos relacionados"""
-        # Ejemplo simple, podría usar un LLM para esto
-        expansions = {
-            "policy": ["policy", "procedure", "standard", "guideline"],
-            "risk": ["risk", "threat", "vulnerability", "exposure"],
-            "incident": ["incident", "event", "breach", "compromise"]
-        }
+    async def _expand_query_with_copilot(self, query: str) -> str:
+        """Expande el query usando Copilot para términos relacionados"""
+        session = await self.copilot.create_session({
+            "model": "claude-sonnet-4.5",
+            "system": """Eres un experto en expandir queries de búsqueda para 
+            mejorar recuperación de información en contextos de seguridad.
+            Expande queries con sinónimos, términos relacionados, y variaciones."""
+        })
         
-        expanded = query
-        for term, synonyms in expansions.items():
-            if term in query.lower():
-                expanded += " " + " ".join(synonyms)
+        prompt = f"""
+        Query original: "{query}"
         
-        return expanded
+        Expande este query con términos relacionados, sinónimos y variaciones
+        que ayudarían a encontrar documentación de seguridad relevante.
+        
+        Retorna solo el query expandido (una línea).
+        """
+        
+        response = await session.chat(prompt)
+        return response.text.strip()
+    
+    async def _rerank_with_copilot(
+        self,
+        query: str,
+        results: List[ScoredPoint],
+        top_k: int
+    ) -> List[ScoredPoint]:
+        """Re-ranking usando GitHub Copilot SDK"""
+        
+        # Crear sesión para re-ranking
+        session = await self.copilot.create_session({
+            "model": "claude-sonnet-4.5",
+            "system": """Eres un experto en evaluar relevancia de documentos.
+            Asigna scores de relevancia (1-10) basado en qué tan bien 
+            responde cada documento a la query del usuario."""
+        })
+        
+        # Formatear documentos
+        docs_text = "\n\n".join([
+            f"[Doc {i+1}]: {r.payload.get('content', '')[:500]}"
+            for i, r in enumerate(results)
+        ])
+        
+        prompt = f"""
+        Query: "{query}"
+        
+        Documentos:
+        {docs_text}
+        
+        Evalúa relevancia de cada documento (1-10).
+        Retorna JSON: {{"scores": [9, 7, 8, 5, ...]}}
+        """
+        
+        response = await session.chat(prompt)
+        scores_data = json.loads(response.text)
+        llm_scores = scores_data["scores"]
+        
+        # Combinar scores originales con LLM scores
+        for result, llm_score in zip(results, llm_scores):
+            normalized_llm = llm_score / 10.0
+            # Promedio ponderado (60% original, 40% LLM)
+            result.score = (result.score * 0.6) + (normalized_llm * 0.4)
+        
+        # Re-ordenar y tomar top_k
+        sorted_results = sorted(results, key=lambda x: x.score, reverse=True)
+        return sorted_results[:top_k]
     
     def _build_filter(self, filters: dict):
         """Construye filtros de Qdrant"""

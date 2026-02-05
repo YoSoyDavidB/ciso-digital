@@ -25,3 +25,18 @@ redis[hiredis]==5.2.1
 # Authentication & Security
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+
+# ============================================================================
+# AI / LLM Services (GitHub Copilot SDK Stack) ⭐ NEW
+# ============================================================================
+
+# Primary AI Engine: GitHub Copilot SDK (v0.1.21)
+# Provides multi-model support (Claude Sonnet 4.5, GPT-4/5, O1)
+# with type-safe tools, infinite context, and session management
+github-copilot-sdk==0.1.21
+
+# Legacy LLM APIs (for embeddings only)
+anthropic==0.43.1  # For embeddings and fallback
+openai==1.57.4     # For embeddings
+
+# ============================================================================

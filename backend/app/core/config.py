@@ -65,19 +65,60 @@ class Settings(BaseSettings):
     )
 
     # ==========================================================================
-    # LLM Services
+    # GitHub Copilot SDK (Primary AI Engine)
+    # ==========================================================================
+    GITHUB_TOKEN: str | None = Field(
+        default=None,
+        description="GitHub token (auto-detected from git config if not set)",
+    )
+    COPILOT_DEFAULT_MODEL: str = Field(
+        default="claude-sonnet-4.5",
+        description="Default model for Copilot SDK (claude-sonnet-4.5, gpt-4, gpt-4.5)",
+    )
+    COPILOT_LOG_LEVEL: Literal["debug", "info", "warning", "error"] = Field(
+        default="info",
+        description="Copilot SDK log level",
+    )
+    COPILOT_AUTO_RESTART: bool = Field(
+        default=True,
+        description="Auto-restart Copilot SDK on connection loss",
+    )
+    COPILOT_MAX_RETRIES: int = Field(
+        default=3,
+        ge=1,
+        description="Maximum retries for Copilot API calls",
+    )
+    
+    # ==========================================================================
+    # Azure OpenAI (Fallback - Optional)
+    # ==========================================================================
+    AZURE_OPENAI_KEY: str | None = Field(
+        default=None,
+        description="Azure OpenAI API key (fallback if GitHub Copilot unavailable)",
+    )
+    AZURE_OPENAI_ENDPOINT: str | None = Field(
+        default=None,
+        description="Azure OpenAI endpoint URL",
+    )
+    AZURE_OPENAI_DEPLOYMENT: str | None = Field(
+        default=None,
+        description="Azure OpenAI deployment name",
+    )
+    
+    # ==========================================================================
+    # LLM Services (Legacy/Embeddings)
     # ==========================================================================
     ANTHROPIC_API_KEY: str | None = Field(
         default=None,
-        description="Anthropic API key for Claude",
+        description="Anthropic API key (legacy, for embeddings only)",
     )
     OPENAI_API_KEY: str | None = Field(
         default=None,
-        description="OpenAI API key (fallback/embeddings)",
+        description="OpenAI API key (for embeddings)",
     )
     LLM_MODEL: str = Field(
         default="claude-sonnet-4-20250514",
-        description="Default LLM model to use",
+        description="Legacy LLM model (deprecated, use COPILOT_DEFAULT_MODEL)",
     )
     LLM_MAX_TOKENS: int = Field(
         default=4096,

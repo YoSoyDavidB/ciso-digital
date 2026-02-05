@@ -129,11 +129,11 @@ Un CISO Digital que:
 ### 4.3 Supuestos (Assumptions)
 
 1. **Infraestructura:** Servidor con Docker y recursos suficientes (16GB RAM, 8 cores)
-2. **APIs de IA:** Acceso a APIs de LLMs (Anthropic Claude, OpenAI GPT-4)
+2. **APIs de IA:** Acceso a GitHub Copilot subscription ($10/mes) con Azure OpenAI como fallback
 3. **Integraciones:** Las organizaciones tienen sistemas SIEM y scanners disponibles
 4. **Datos:** Existe documentación base de seguridad (políticas, procedimientos)
 5. **Lenguaje:** Sistema principalmente en español con soporte para inglés
-6. **Costos:** Presupuesto para APIs de IA (~$500-1000 USD/mes inicialmente)
+6. **Costos:** Presupuesto significativamente reducido gracias a GitHub Copilot SDK (~$10-60 USD/mes vs $500-1000 anteriormente)
 
 ### 4.4 Restricciones (Constraints)
 
@@ -249,20 +249,22 @@ Un CISO Digital que:
 
 | ID | Riesgo | Probabilidad | Impacto | Mitigación |
 |----|--------|--------------|---------|------------|
-| R1 | Costos de APIs de IA exceden presupuesto | Media | Alto | Implementar caching agresivo, usar modelos más pequeños cuando sea posible |
+| R1 | Costos de APIs de IA exceden presupuesto | Baja | Bajo | GitHub Copilot SDK ($100/año) con Azure OpenAI fallback, caching agresivo |
 | R2 | Complejidad de integraciones subestimada | Alta | Medio | Implementación incremental, APIs bien documentadas |
 | R3 | Performance de RAG insuficiente | Media | Alto | Benchmarking temprano, optimización de embeddings |
 | R4 | Hallucinations de LLM en decisiones críticas | Media | Crítico | Validación humana para acciones críticas, confidence thresholds |
 | R5 | Scope creep durante desarrollo | Alta | Medio | Gestión estricta de backlog, MVPs claramente definidos |
 | R6 | Falta de datos de entrenamiento/testing | Media | Medio | Generar datasets sintéticos, usar datos públicos |
-| R7 | Cambios en APIs de proveedores LLM | Baja | Alto | Abstracción de provider, múltiples providers soportados |
+| R7 | Cambios en APIs de proveedores LLM | Baja | Medio | Copilot SDK abstrae providers, Azure OpenAI como fallback integrado |
 
 ### 8.2 Plan de Contingencia
 
 **Para R1 (Costos de APIs):**
-- Implementar presupuesto mensual y alertas
-- Considerar modelos open-source (Llama, Mistral) como fallback
-- Implementar token budgets por feature
+- Ya estamos usando la arquitectura más económica (GitHub Copilot SDK $10/mes)
+- Azure OpenAI fallback solo se usa en caso de errores
+- Implementar caching agresivo en Redis
+- Monitorear uso de Azure con alertas de presupuesto
+- Costos proyectados: <$1,000/año total (ahorro de $6k-12k/año vs arquitectura anterior)
 
 **Para R4 (Hallucinations):**
 - Nunca ejecutar acciones críticas sin confirmación humana
@@ -276,20 +278,35 @@ Un CISO Digital que:
 
 | Concepto | Costo Mensual | Notas |
 |----------|---------------|-------|
-| APIs de IA (Claude/GPT-4) | $500-1000 | Variable según uso |
+| GitHub Copilot SDK | $10 | O $100/año (primary LLM engine) |
+| Azure OpenAI (fallback) | $20-50 | Solo uso ocasional en caso de errores |
 | Infraestructura (servidor) | $0 | Ya disponible |
 | Dominios y SSL | $20 | Anual prorrateado |
 | Herramientas de desarrollo | $0 | Open-source |
-| **Total Mensual** | **~$520-1020** | |
+| **Total Mensual** | **~$50-80** | **Ahorro: $440-920/mes vs arquitectura anterior** |
 
 ### 9.2 Costos Post-Producción
 
 | Concepto | Costo Mensual | Notas |
 |----------|---------------|-------|
-| APIs de IA (producción) | $1000-2000 | Mayor volumen |
+| GitHub Copilot SDK | $10 | Primary LLM engine |
+| Azure OpenAI (fallback) | $50-100 | Uso ocasional esperado |
 | Monitoring (opcional) | $50 | DataDog/New Relic |
 | Backups y storage | $30 | S3 o similar |
-| **Total Mensual Producción** | **~$1080-2080** | |
+| **Total Mensual Producción** | **~$140-190** | **Ahorro: $890-1,890/mes vs arquitectura anterior** |
+
+### 9.3 ROI Proyectado
+
+**Ahorros Anuales con GitHub Copilot SDK:**
+- Costos evitados de APIs directas: $6,000-12,000 USD/año
+- Desarrollo: $8,040-$12,480/año ahorrados
+- Producción: $10,680-$22,680/año ahorrados
+
+**Beneficios adicionales:**
+- Multi-modelo desde una SDK (Claude, GPT-4, o1)
+- Tool calling nativo
+- Fallback automático a Azure
+- Runtime probado en producción
 
 ## 10. CRITERIOS DE ACEPTACIÓN
 

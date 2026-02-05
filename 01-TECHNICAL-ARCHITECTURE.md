@@ -107,7 +107,7 @@
 │  └────────────────────────────────────────────────────────────┘    │
 │                           │                                          │
 │  ┌────────────────────────▼──────────────────────────────────┐     │
-│  │              RAG SYSTEM (LangChain/LlamaIndex)             │     │
+│  │         RAG SYSTEM (GitHub Copilot SDK Tools)              │     │
 │  │                                                            │     │
 │  │  ┌──────────────────┐         ┌──────────────────┐       │     │
 │  │  │  Query Processor │────────▶│ Embedding Service│       │     │
@@ -121,8 +121,8 @@
 │  │           │                                                │     │
 │  │           ▼                                                │     │
 │  │  ┌──────────────────┐         ┌──────────────────┐       │     │
-│  │  │  Context Builder │────────▶│   LLM Service    │       │     │
-│  │  │  & Prompt Eng    │         │ (Claude/GPT-4)   │       │     │
+│  │  │  Context Builder │────────▶│  Copilot Session │       │     │
+│  │  │  & Prompt Eng    │         │ (Multi-modelo)   │       │     │
 │  │  └──────────────────┘         └──────────────────┘       │     │
 │  └────────────────────────────────────────────────────────────┘     │
 └───────────────────────────┼─────────────────────────────────────────┘
@@ -245,33 +245,44 @@ httpx==0.26.0  # Async HTTP client
 
 ### 3.2 Inteligencia Artificial
 
-**LLM Providers:**
+**LLM Engine:**
 ```python
-# AI/LLM Stack
-anthropic==0.18.1  # Claude (primary)
-openai==1.12.0  # GPT-4 (fallback/specialized tasks)
-langchain==0.1.6  # Orchestration
-langchain-anthropic==0.1.1
-langchain-openai==0.0.5
-langchain-community==0.0.20
-llama-index==0.10.0  # Alternative RAG framework
+# AI/LLM Stack - GitHub Copilot SDK como motor principal
+github-copilot-sdk==0.1.0  # Motor principal de agentes con multi-modelo
+# Soporta: Claude Sonnet 4.5, GPT-4.5, o1, o1-mini via single SDK
+# VENTAJA: $0 costo adicional (ya tenemos suscripción GitHub Copilot)
+# AHORRO ESTIMADO: $6,000-12,000 USD/año vs Anthropic/OpenAI directo
+
+# Azure OpenAI (fallback para redundancia)
+azure-openai==1.12.0  # Fallback si GitHub Copilot no disponible
+openai==1.12.0  # Client base para Azure OpenAI
 
 # Embeddings
 sentence-transformers==2.3.1  # Local embeddings (fallback)
 cohere==4.47  # Cohere embeddings (option)
+
+# NOTA: NO usar langchain - GitHub Copilot SDK es framework completo
+# El SDK incluye:
+# - Orquestación de agentes
+# - Tool calling automático
+# - Session management
+# - Streaming responses
+# - Context management
 ```
 
 **RAG Stack:**
 ```python
-# Vector DB & RAG
+# Vector DB
 qdrant-client==1.7.3
-langchain-qdrant==0.1.0
 
 # Text processing
 pypdf==3.17.4  # PDF parsing
 python-docx==1.1.0  # DOCX parsing
 beautifulsoup4==4.12.3  # HTML parsing
 markdown==3.5.2  # Markdown processing
+
+# NOTA: RAG se integra directamente con GitHub Copilot SDK via tools
+# No necesitamos langchain-qdrant
 ```
 
 ### 3.3 Bases de Datos
@@ -433,26 +444,60 @@ Alerting:
 ### 4.1 Diseño Multi-Agente
 
 ```python
-# Estructura de clases base
+# Estructura de clases base usando GitHub Copilot SDK
+
+from copilot import CopilotClient
+from copilot.tools import define_tool
+from abc import ABC, abstractmethod
+from typing import List, Dict, Optional
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 class BaseAgent(ABC):
-    """Clase base para todos los agentes"""
+    """Clase base para todos los agentes usando GitHub Copilot SDK"""
     
     def __init__(
         self,
-        llm_service: LLMService,
+        copilot_client: CopilotClient,
         rag_service: RAGService,
         db_session: AsyncSession
     ):
-        self.llm = llm_service
+        self.client = copilot_client
         self.rag = rag_service
         self.db = db_session
         self.name = self.__class__.__name__
+        self.session = None  # Copilot session
         
     @abstractmethod
-    async def execute(self, task: Task) -> AgentResponse:
+    async def get_system_prompt(self) -> str:
+        """Retorna el system prompt específico del agente"""
+        pass
+    
+    @abstractmethod
+    def get_tools(self) -> List:
+        """Retorna las tools específicas del agente"""
+        pass
+        
+    async def initialize_session(self):
+        """Inicializa sesión de Copilot con model y tools"""
+        self.session = await self.client.create_session({
+            "model": "claude-sonnet-4.5",  # Primary model
+            "system": await self.get_system_prompt(),
+            "tools": self.get_tools()
+        })
+        
+    @abstractmethod
+    async def execute(self, task: Dict) -> Dict:
         """Método principal de ejecución"""
         pass
+        
+    async def chat(self, message: str) -> str:
+        """Envía mensaje al agente y obtiene respuesta"""
+        if not self.session:
+            await self.initialize_session()
+        
+        response = await self.session.chat(message)
+        return response.text
         
     async def gather_context(self, query: str) -> List[Document]:
         """Recopila contexto relevante de RAG"""
@@ -469,6 +514,19 @@ class BaseAgent(ABC):
             action=action,
             metadata=metadata
         )
+        
+    async def fallback_to_azure(self):
+        """Fallback a Azure OpenAI si Copilot falla"""
+        self.session = await self.client.create_session({
+            "model": "gpt-4",
+            "system": await self.get_system_prompt(),
+            "tools": self.get_tools(),
+            "provider": {
+                "type": "azure",
+                "base_url": settings.AZURE_OPENAI_ENDPOINT,
+                "api_key": settings.AZURE_OPENAI_KEY
+            }
+        })
 ```
 
 ### 4.2 CISO Orchestrator
@@ -476,53 +534,103 @@ class BaseAgent(ABC):
 ```python
 class CISOOrchestrator:
     """
-    Orquestador principal que:
+    Orquestador principal usando GitHub Copilot SDK:
     1. Analiza intención del usuario
     2. Selecciona agente(s) apropiado(s)
     3. Coordina ejecución
     4. Agrega resultados
     """
     
-    def __init__(self):
+    def __init__(self, copilot_client: CopilotClient):
+        self.client = copilot_client
         self.agents = {
-            "risk": RiskAssessmentAgent(),
-            "incident": IncidentResponseAgent(),
-            "compliance": ComplianceAgent(),
-            "threat_intel": ThreatIntelAgent(),
-            "reporting": ReportingAgent(),
-            "proactive": ProactiveReviewAgent()
+            "risk": RiskAssessmentAgent(copilot_client, rag_service, db),
+            "incident": IncidentResponseAgent(copilot_client, rag_service, db),
+            "compliance": ComplianceAgent(copilot_client, rag_service, db),
+            "threat_intel": ThreatIntelAgent(copilot_client, rag_service, db),
+            "reporting": ReportingAgent(copilot_client, rag_service, db),
+            "proactive": ProactiveReviewAgent(copilot_client, rag_service, db)
         }
+        self.classifier_session = None
+        
+    async def initialize(self):
+        """Inicializa session del clasificador de intención"""
+        self.classifier_session = await self.client.create_session({
+            "model": "claude-sonnet-4.5",
+            "system": """Eres un clasificador de intenciones para un CISO Digital.
+            Analiza el mensaje del usuario y determina qué agente(s) debe manejar la solicitud.
+            
+            Agentes disponibles:
+            - risk: Evaluación de riesgos
+            - incident: Respuesta a incidentes
+            - compliance: Cumplimiento normativo
+            - threat_intel: Inteligencia de amenazas
+            - reporting: Generación de reportes
+            - proactive: Revisiones proactivas
+            
+            Retorna JSON con: {"agents": ["agent1", "agent2"], "priority": "high|medium|low"}
+            """
+        })
         
     async def process_request(
         self,
         user_query: str,
-        context: ConversationContext
-    ) -> Response:
+        context: Dict
+    ) -> Dict:
         """
         Procesa request del usuario
         """
-        # 1. Clasificar intención
-        intent = await self.classify_intent(user_query)
+        if not self.classifier_session:
+            await self.initialize()
+        
+        # 1. Clasificar intención usando Copilot
+        classification_response = await self.classifier_session.chat(
+            f"Usuario: {user_query}\nContexto: {context}"
+        )
+        classification = json.loads(classification_response.text)
         
         # 2. Seleccionar agentes
-        agents_to_run = self.select_agents(intent)
+        agents_to_run = [
+            self.agents[agent_name] 
+            for agent_name in classification["agents"]
+        ]
         
         # 3. Ejecutar agentes (paralelo si es posible)
         results = await asyncio.gather(
-            *[agent.execute(user_query, context) 
+            *[agent.execute({"query": user_query, "context": context}) 
               for agent in agents_to_run]
         )
         
-        # 4. Agregar resultados
-        final_response = await self.aggregate_results(results)
+        # 4. Agregar resultados usando Copilot
+        aggregation_prompt = f"""
+        Query del usuario: {user_query}
         
-        return final_response
+        Resultados de agentes:
+        {json.dumps(results, indent=2)}
+        
+        Genera una respuesta consolidada y coherente.
+        """
+        
+        aggregator_session = await self.client.create_session({
+            "model": "claude-sonnet-4.5",
+            "system": "Agrega y sintetiza respuestas de múltiples agentes especializados."
+        })
+        
+        final_response = await aggregator_session.chat(aggregation_prompt)
+        
+        return {
+            "response": final_response.text,
+            "agents_used": classification["agents"],
+            "raw_results": results
+        }
 ```
 
 ### 4.3 Agentes Especializados
 
 **1. Risk Assessment Agent:**
 ```python
+from copilot.tools import define_tool
+
 class RiskAssessmentAgent(BaseAgent):
     """
     Responsabilidades:
@@ -534,40 +642,99 @@ class RiskAssessmentAgent(BaseAgent):
     
     collection_name = "security_knowledge"
     
-    async def execute(self, task: RiskAssessmentTask) -> RiskReport:
-        # Obtener información del asset
-        asset = await self.db.get(Asset, task.asset_id)
+    async def get_system_prompt(self) -> str:
+        return """Eres un experto en evaluación de riesgos de seguridad.
+        Analizas vulnerabilidades, criticidad de assets, y contexto de amenazas
+        para calcular risk scores precisos y recomendar remediaciones priorizadas.
         
-        # Buscar vulnerabilidades conocidas
-        vulns = await self.get_vulnerabilities(asset)
+        Usa las tools disponibles para:
+        - Buscar información en la base de conocimientos
+        - Consultar vulnerabilidades conocidas
+        - Calcular risk scores
+        """
+    
+    def get_tools(self) -> List:
+        """Define tools específicas para risk assessment"""
         
-        # Contexto de RAG sobre riesgos similares
-        context = await self.gather_context(
-            f"riesgos de {asset.type} con {vulns}"
-        )
+        @define_tool(description="Busca información de riesgos en knowledge base")
+        async def search_risk_knowledge(query: str) -> dict:
+            results = await self.rag.search(query, self.collection_name)
+            return {"results": [doc.content for doc in results]}
         
-        # LLM evalúa riesgo
-        risk_analysis = await self.llm.analyze(
-            prompt=self.build_risk_prompt(asset, vulns, context),
-            temperature=0.3  # Más determinístico
-        )
+        @define_tool(description="Obtiene vulnerabilidades de un asset")
+        async def get_asset_vulnerabilities(asset_id: str) -> dict:
+            vulns = await self.db.execute(
+                select(Vulnerability).where(Vulnerability.asset_id == asset_id)
+            )
+            return {"vulnerabilities": [v.to_dict() for v in vulns.scalars()]}
         
-        # Calcular risk score
-        risk_score = self.calculate_risk_score(
-            vulns, 
-            asset.criticality,
-            risk_analysis
-        )
+        @define_tool(description="Calcula risk score basado en parámetros")
+        async def calculate_risk_score(
+            cvss_scores: List[float],
+            asset_criticality: str,
+            exploitability: str
+        ) -> dict:
+            # Lógica de cálculo
+            base_score = max(cvss_scores) if cvss_scores else 0
+            multiplier = {"critical": 1.5, "high": 1.3, "medium": 1.0, "low": 0.8}
+            final_score = min(10.0, base_score * multiplier.get(asset_criticality, 1.0))
+            return {"risk_score": final_score}
         
-        # Guardar en DB
-        risk = await Risk.create(
-            asset_id=asset.id,
-            score=risk_score,
-            analysis=risk_analysis,
-            status="open"
-        )
+        return [search_risk_knowledge, get_asset_vulnerabilities, calculate_risk_score]
+    
+    async def execute(self, task: Dict) -> Dict:
+        """Ejecuta evaluación de riesgo"""
+        asset_id = task.get("asset_id")
         
-        return RiskReport(risk=risk, recommendations=[...])
+        # Inicializar session si no existe
+        if not self.session:
+            await self.initialize_session()
+        
+        # El agente usará las tools automáticamente según necesite
+        prompt = f"""
+        Evalúa el riesgo del asset ID: {asset_id}
+        
+        Pasos:
+        1. Obtén las vulnerabilidades del asset
+        2. Busca contexto sobre riesgos similares
+        3. Calcula el risk score
+        4. Genera recomendaciones priorizadas
+        
+        Retorna JSON con:
+        {{
+            "risk_score": float,
+            "severity": "critical|high|medium|low",
+            "vulnerabilities_count": int,
+            "recommendations": [...]
+        }}
+        """
+        
+        try:
+            response = await self.session.chat(prompt)
+            result = json.loads(response.text)
+            
+            # Guardar en DB
+            await Risk.create(
+                asset_id=asset_id,
+                score=result["risk_score"],
+                severity=result["severity"],
+                analysis=response.text,
+                status="open"
+            )
+            
+            await self.log_action("risk_assessment", {
+                "asset_id": asset_id,
+                "score": result["risk_score"]
+            })
+            
+            return result
+            
+        except Exception as e:
+            # Fallback a Azure si GitHub Copilot falla
+            logger.warning(f"Copilot failed, using Azure fallback: {e}")
+            await self.fallback_to_azure()
+            response = await self.session.chat(prompt)
+            return json.loads(response.text)
 ```
 
 **2. Incident Response Agent:**
@@ -581,47 +748,75 @@ class IncidentResponseAgent(BaseAgent):
     - Documentar respuesta
     """
     
-    async def execute(self, event: SecurityEvent) -> IncidentResponse:
-        # Clasificar tipo de incidente
-        incident_type = await self.classify_incident(event)
-        
-        # Buscar playbook apropiado
-        playbook = await self.get_playbook(incident_type)
-        
-        # Contexto de incidentes similares
-        similar_incidents = await self.rag.search(
-            query=f"{incident_type} incident",
-            collection="incident_memory",
-            top_k=3
-        )
-        
-        # LLM determina acciones
-        response_plan = await self.llm.generate(
-            prompt=self.build_response_prompt(
-                event, playbook, similar_incidents
+    async def get_system_prompt(self) -> str:
+        return """Eres un experto en respuesta a incidentes de seguridad.
+        Clasifica incidentes, ejecutas playbooks apropiados, y coordinas
+        las acciones de respuesta según las mejores prácticas.
+        """
+    
+    def get_tools(self) -> List:
+        @define_tool(description="Busca playbooks para tipo de incidente")
+        async def get_playbook(incident_type: str) -> dict:
+            playbook = await self.db.execute(
+                select(Playbook).where(Playbook.incident_type == incident_type)
             )
-        )
+            return {"playbook": playbook.scalar_one_or_none().to_dict()}
         
-        # Ejecutar acciones automatizadas
-        actions_taken = await self.execute_actions(response_plan)
+        @define_tool(description="Busca incidentes similares previos")
+        async def search_similar_incidents(description: str) -> dict:
+            results = await self.rag.search(description, "incident_memory")
+            return {"similar_incidents": [doc.content for doc in results]}
+        
+        @define_tool(description="Ejecuta acción de respuesta")
+        async def execute_response_action(action: str, params: dict) -> dict:
+            # Ejecutar acción (ej: aislar host, bloquear IP, etc.)
+            result = await action_executor.execute(action, params)
+            return {"action_result": result}
+        
+        return [get_playbook, search_similar_incidents, execute_response_action]
+    
+    async def execute(self, task: Dict) -> Dict:
+        event = task.get("event")
+        
+        if not self.session:
+            await self.initialize_session()
+        
+        prompt = f"""
+        Incidente detectado:
+        - Tipo: {event.get("type")}
+        - Descripción: {event.get("description")}
+        - Fuente: {event.get("source")}
+        
+        Acciones:
+        1. Clasifica la severidad (critical/high/medium/low)
+        2. Busca playbook apropiado
+        3. Revisa incidentes similares para aprender
+        4. Determina acciones de respuesta
+        5. Ejecuta acciones automatizadas si es seguro
+        
+        Retorna JSON con plan de respuesta completo.
+        """
+        
+        response = await self.session.chat(prompt)
+        result = json.loads(response.text)
         
         # Crear incident record
         incident = await Incident.create(
-            title=event.title,
-            severity=response_plan.severity,
-            actions=actions_taken,
+            title=event.get("title"),
+            severity=result["severity"],
+            actions_taken=result.get("actions_taken", []),
             status="investigating"
         )
         
-        # Notificar stakeholders si es crítico
-        if incident.severity == "critical":
+        # Notificar si es crítico
+        if result["severity"] == "critical":
             await self.notify_stakeholders(incident)
         
-        return IncidentResponse(
-            incident=incident,
-            actions=actions_taken,
-            next_steps=response_plan.next_steps
-        )
+        return {
+            "incident_id": incident.id,
+            "severity": result["severity"],
+            "response_plan": result
+        }
 ```
 
 **3. Compliance Agent:**
@@ -635,50 +830,71 @@ class ComplianceAgent(BaseAgent):
     - Producir reportes de compliance
     """
     
-    async def execute(
-        self,
-        task: ComplianceCheckTask
-    ) -> ComplianceReport:
-        
-        framework = task.framework  # ISO27001, NIST, etc.
-        
-        # Obtener controles del framework
-        controls = await self.get_framework_controls(framework)
-        
-        # Verificar cada control
-        results = []
-        for control in controls:
-            # Buscar evidencias en RAG
-            evidence = await self.rag.search(
-                query=f"{framework} {control.id} evidence",
-                collection="security_knowledge"
+    async def get_system_prompt(self) -> str:
+        return """Eres un auditor de cumplimiento de seguridad experto en 
+        frameworks como ISO 27001, NIST CSF, SOC 2, GDPR, etc.
+        Evalúas controles, recopilas evidencias, y generas reportes de compliance.
+        """
+    
+    def get_tools(self) -> List:
+        @define_tool(description="Obtiene controles de un framework")
+        async def get_framework_controls(framework: str) -> dict:
+            controls = await self.db.execute(
+                select(Control).where(Control.framework == framework)
             )
-            
-            # LLM evalúa cumplimiento
-            assessment = await self.llm.assess(
-                prompt=self.build_compliance_prompt(
-                    control, evidence
-                )
-            )
-            
-            results.append(
-                ControlAssessment(
-                    control=control,
-                    status=assessment.status,
-                    evidence=evidence,
-                    gaps=assessment.gaps
-                )
-            )
+            return {"controls": [c.to_dict() for c in controls.scalars()]}
         
-        # Generar reporte
-        report = ComplianceReport(
+        @define_tool(description="Busca evidencias de cumplimiento")
+        async def search_compliance_evidence(control_id: str) -> dict:
+            results = await self.rag.search(
+                f"evidence for control {control_id}",
+                "security_knowledge"
+            )
+            return {"evidence": [doc.content for doc in results]}
+        
+        @define_tool(description="Evalúa estado de un control")
+        async def assess_control_status(
+            control_id: str,
+            evidence: List[str]
+        ) -> dict:
+            # Lógica de evaluación
+            status = "compliant" if len(evidence) >= 3 else "non_compliant"
+            return {"status": status, "evidence_count": len(evidence)}
+        
+        return [get_framework_controls, search_compliance_evidence, assess_control_status]
+    
+    async def execute(self, task: Dict) -> Dict:
+        framework = task.get("framework")  # ISO27001, NIST, etc.
+        
+        if not self.session:
+            await self.initialize_session()
+        
+        prompt = f"""
+        Ejecuta auditoría de cumplimiento para: {framework}
+        
+        Proceso:
+        1. Obtén todos los controles del framework
+        2. Para cada control, busca evidencias
+        3. Evalúa el estado de cumplimiento
+        4. Identifica gaps y recomendaciones
+        5. Calcula compliance rate global
+        
+        Retorna reporte completo en JSON.
+        """
+        
+        response = await self.session.chat(prompt)
+        result = json.loads(response.text)
+        
+        # Guardar reporte
+        await ComplianceReport.create(
             framework=framework,
-            controls=results,
-            compliance_rate=self.calculate_rate(results),
-            recommendations=await self.generate_recommendations(results)
+            compliance_rate=result["compliance_rate"],
+            controls_assessed=result["controls_count"],
+            gaps=result["gaps"],
+            report_data=result
         )
         
-        return report
+        return result
 ```
 
 **4. Proactive Review Agent:** (⭐ CLAVE)
@@ -693,63 +909,133 @@ class ProactiveReviewAgent(BaseAgent):
     - Sugerir mejoras proactivas
     """
     
-    async def execute(
-        self, 
-        task: ProactiveReviewTask
-    ) -> ProactiveReport:
+    async def get_system_prompt(self) -> str:
+        return """Eres un CISO proactivo que revisa constantemente la postura
+        de seguridad de la organización. Identificas gaps en documentación,
+        políticas desactualizadas, controles faltantes, y propones mejoras
+        antes de que se conviertan en problemas.
         
-        # 1. Inventario de documentación actual
-        current_docs = await self.inventory_documents()
+        Tu objetivo es mantener la seguridad al día y adelantarte a problemas.
+        """
+    
+    def get_tools(self) -> List:
+        @define_tool(description="Obtiene inventario de documentación actual")
+        async def get_current_documents() -> dict:
+            docs = await self.db.execute(select(Document))
+            return {
+                "documents": [
+                    {
+                        "id": d.id,
+                        "title": d.title,
+                        "type": d.type,
+                        "last_updated": str(d.updated_at),
+                        "framework": d.framework
+                    }
+                    for d in docs.scalars()
+                ]
+            }
         
-        # 2. Obtener frameworks aplicables
-        frameworks = await self.get_applicable_frameworks()
-        
-        # 3. Para cada framework, identificar gaps
-        gaps = []
-        for framework in frameworks:
-            required_docs = await self.get_required_documents(framework)
-            
-            for req_doc in required_docs:
-                if not self.document_exists(req_doc, current_docs):
-                    gaps.append(
-                        DocumentGap(
-                            framework=framework,
-                            missing_document=req_doc,
-                            priority=req_doc.priority,
-                            deadline=self.calculate_deadline(req_doc)
-                        )
-                    )
-        
-        # 4. Revisar documentos existentes
-        outdated_docs = []
-        for doc in current_docs:
-            is_outdated = await self.check_if_outdated(doc)
-            if is_outdated:
-                outdated_docs.append(doc)
-        
-        # 5. LLM genera recomendaciones proactivas
-        recommendations = await self.llm.generate(
-            prompt=self.build_proactive_prompt(
-                gaps, outdated_docs, current_docs
+        @define_tool(description="Obtiene frameworks aplicables")
+        async def get_applicable_frameworks() -> dict:
+            frameworks = await self.db.execute(
+                select(ComplianceFramework).where(
+                    ComplianceFramework.applicable == True
+                )
             )
+            return {"frameworks": [f.name for f in frameworks.scalars()]}
+        
+        @define_tool(description="Verifica si documento está desactualizado")
+        async def check_document_freshness(doc_id: str, max_age_days: int = 365) -> dict:
+            doc = await self.db.get(Document, doc_id)
+            age_days = (datetime.utcnow() - doc.updated_at).days
+            is_outdated = age_days > max_age_days
+            return {
+                "document_id": doc_id,
+                "age_days": age_days,
+                "is_outdated": is_outdated,
+                "last_updated": str(doc.updated_at)
+            }
+        
+        @define_tool(description="Busca documentos requeridos por framework")
+        async def get_required_documents(framework: str) -> dict:
+            results = await self.rag.search(
+                f"{framework} required documentation policies procedures",
+                "compliance_requirements"
+            )
+            return {"required_docs": [doc.content for doc in results]}
+        
+        return [
+            get_current_documents,
+            get_applicable_frameworks,
+            check_document_freshness,
+            get_required_documents
+        ]
+    
+    async def execute(self, task: Dict) -> Dict:
+        """Ejecuta revisión proactiva completa"""
+        
+        if not self.session:
+            await self.initialize_session()
+        
+        prompt = """
+        Ejecuta revisión proactiva de la postura de seguridad:
+        
+        1. INVENTARIO:
+           - Obtén documentación actual
+           - Obtén frameworks aplicables
+        
+        2. GAP ANALYSIS:
+           - Para cada framework, identifica documentos requeridos
+           - Compara con inventario actual
+           - Lista documentos faltantes con prioridad
+        
+        3. FRESHNESS CHECK:
+           - Revisa edad de cada documento existente
+           - Identifica documentos desactualizados (>365 días)
+           - Prioriza actualizaciones necesarias
+        
+        4. RECOMMENDATIONS:
+           - Genera plan de acción priorizado
+           - Estima esfuerzo para cada tarea
+           - Define deadlines sugeridos
+           - Identifica riesgos de no actuar
+        
+        Retorna JSON completo con:
+        {
+            "missing_documents": [...],
+            "outdated_documents": [...],
+            "action_plan": [...],
+            "priority_score": float,
+            "estimated_effort_hours": int
+        }
+        """
+        
+        response = await self.session.chat(prompt)
+        result = json.loads(response.text)
+        
+        # Guardar resultados para seguimiento
+        await ProactiveReview.create(
+            review_type="full_assessment",
+            gaps_found=len(result["missing_documents"]),
+            outdated_found=len(result["outdated_documents"]),
+            priority_score=result["priority_score"],
+            action_plan=result["action_plan"],
+            review_data=result
         )
         
-        # 6. Crear action plan
-        action_plan = await self.create_action_plan(
-            gaps, outdated_docs, recommendations
-        )
+        # Crear tasks automáticamente para items críticos
+        for item in result["action_plan"]:
+            if item.get("priority") == "critical":
+                await Task.create(
+                    title=item["title"],
+                    description=item["description"],
+                    priority="critical",
+                    due_date=item["deadline"],
+                    assigned_to="security_team",
+                    source="proactive_review"
+                )
         
-        # 7. Guardar en DB para seguimiento
-        await self.save_proactive_review(
-            gaps, outdated_docs, action_plan
-        )
-        
-        return ProactiveReport(
-            gaps=gaps,
-            outdated_documents=outdated_docs,
-            recommendations=recommendations,
-            action_plan=action_plan
-        )
+        return result
 ```
 
 ## 5. SISTEMA RAG (Retrieval Augmented Generation)
@@ -765,17 +1051,17 @@ class RAGService:
     3. Vector search
     4. Re-ranking
     5. Context building
+    
+    Se integra con GitHub Copilot SDK via tools (@define_tool)
     """
     
     def __init__(
         self,
         qdrant_client: QdrantClient,
-        embedding_service: EmbeddingService,
-        llm_service: LLMService
+        embedding_service: EmbeddingService
     ):
         self.qdrant = qdrant_client
         self.embedder = embedding_service
-        self.llm = llm_service
         
     async def search(
         self,
@@ -786,6 +1072,7 @@ class RAGService:
     ) -> List[Document]:
         """
         Búsqueda semántica con RAG
+        Esta función se expone como tool para los agentes de Copilot
         """
         # 1. Generar embedding del query
         query_vector = await self.embedder.embed(query)
@@ -799,7 +1086,7 @@ class RAGService:
         )
         
         # 3. Re-ranking (opcional pero recomendado)
-        reranked = await self.rerank(query, search_results)
+        reranked = await self.rerank_with_copilot(query, search_results)
         
         # 4. Tomar top_k después de re-ranking
         final_results = reranked[:top_k]
@@ -815,33 +1102,79 @@ class RAGService:
         ]
         
         return documents
-        
-    async def rerank(
+    
+    async def rerank_with_copilot(
         self,
         query: str,
         results: List[ScoredPoint]
     ) -> List[ScoredPoint]:
         """
-        Re-ranking usando LLM para mejor relevancia
+        Re-ranking usando GitHub Copilot SDK para mejor relevancia
         """
-        # Usar LLM para evaluar relevancia
+        # Crear sesión temporal de Copilot para re-ranking
+        client = CopilotClient()
+        session = await client.create_session({
+            "model": "claude-sonnet-4.5",
+            "system": """Eres un experto en evaluar relevancia de documentos.
+            Asigna scores de relevancia (1-10) basado en qué tan bien 
+            responde cada documento a la query del usuario."""
+        })
+        
+        # Formatear resultados para evaluación
+        docs_text = "\n\n".join([
+            f"[Doc {i+1}]: {r.payload.get('content', '')[:500]}"
+            for i, r in enumerate(results)
+        ])
+        
         prompt = f"""
-        Query: {query}
+        Query: "{query}"
         
-        Evalúa la relevancia de cada documento (1-10):
-        {self.format_results_for_reranking(results)}
+        Documentos:
+        {docs_text}
         
-        Retorna scores en orden.
+        Evalúa relevancia de cada documento (1-10).
+        Retorna JSON: {{"scores": [9, 7, 8, 5, ...]}}
         """
         
-        scores = await self.llm.get_relevance_scores(prompt, results)
+        response = await session.chat(prompt)
+        scores_data = json.loads(response.text)
+        llm_scores = scores_data["scores"]
         
         # Combinar scores originales con LLM scores
-        for result, llm_score in zip(results, scores):
-            result.score = (result.score + llm_score / 10) / 2
+        for result, llm_score in zip(results, llm_scores):
+            # Normalizar LLM score a 0-1
+            normalized_llm = llm_score / 10.0
+            # Promedio ponderado (60% original, 40% LLM)
+            result.score = (result.score * 0.6) + (normalized_llm * 0.4)
         
         # Re-ordenar
         return sorted(results, key=lambda x: x.score, reverse=True)
+    
+    def as_copilot_tool(self):
+        """
+        Convierte RAG search en tool para Copilot agents
+        """
+        from copilot.tools import define_tool
+        
+        @define_tool(description="Busca información en knowledge base usando RAG")
+        async def search_knowledge_base(
+            query: str,
+            collection: str = "security_knowledge",
+            top_k: int = 5
+        ) -> dict:
+            results = await self.search(query, collection, top_k)
+            return {
+                "results": [
+                    {
+                        "content": doc.content,
+                        "score": doc.score,
+                        "metadata": doc.metadata
+                    }
+                    for doc in results
+                ]
+            }
+        
+        return search_knowledge_base
 ```
 
 ### 5.2 Embedding Strategy
