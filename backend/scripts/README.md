@@ -1,8 +1,53 @@
 # Scripts de Desarrollo
 
-Este directorio contiene scripts útiles para desarrollo y verificación de calidad.
+Este directorio contiene scripts útiles para desarrollo, demos y verificación de calidad.
 
 ## 📋 Scripts Disponibles
+
+### 🎭 `demo_ciso_orchestrator.py` - Demo del Sistema
+
+**Demostración completa del orchestrador y respuesta a incidentes.**
+
+**Uso:**
+```bash
+cd backend
+python scripts/demo_ciso_orchestrator.py
+```
+
+**Funcionalidades demostradas:**
+1. **Conversación multi-turno con memoria**
+   - Query 1: "¿Cuáles son los riesgos críticos?"
+   - Query 2: "Dame más detalles del primer riesgo"
+   - Verifica que mantiene contexto entre mensajes
+
+2. **Clasificación de intenciones**
+   - Queries de riesgo → RiskAssessmentAgent
+   - Queries de incidentes → IncidentResponseAgent  
+   - Queries de compliance → ComplianceAgent
+   - Muestra confidence scores y agente seleccionado
+
+3. **Respuesta a incidentes completa**
+   - Detección de ransomware
+   - Clasificación automática (tipo, severidad, confidence)
+   - Generación de plan de respuesta
+   - Acciones inmediatas y contención
+   - Notificaciones a stakeholders
+   - Métricas de rendimiento
+
+**Output esperado:**
+```
+🤖 CISO Digital Demo - Orchestrator & Incident Response
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Test 1: Multi-turn Conversation with Memory
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+👤 User: ¿Cuáles son los riesgos críticos?
+🔍 Orchestrator: Intent: risk_assessment (confidence: 0.95)
+                Agent: RiskAssessmentAgent
+🤖 CISO: [respuesta detallada con 3 riesgos críticos]
+...
+```
 
 ### `verify.sh` - Verificación de Calidad
 

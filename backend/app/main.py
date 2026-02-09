@@ -145,16 +145,17 @@ def create_app() -> FastAPI:
     from app.api.routes.health import router as health_router
     from app.api.routes.risk import router as risk_router
     from app.api.routes.chat import router as chat_router
+    from app.api.routes.incidents import router as incidents_router
 
     # Register routers
     app.include_router(health_router)
     app.include_router(risk_router)
     app.include_router(chat_router, prefix="/api/v1")
+    app.include_router(incidents_router)
 
     # TODO: Agregar routers adicionales
     # app.include_router(auth_router, prefix="/api/v1")
     # app.include_router(users_router, prefix="/api/v1")
-    # app.include_router(incidents_router, prefix="/api/v1")
 
     # =========================================================================
     # Exception Handlers

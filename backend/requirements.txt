@@ -58,4 +58,8 @@ prometheus-client==0.20.0  # Prometheus metrics export
 pytest-benchmark==4.0.0  # Performance benchmarking for pytest
 psutil==5.9.8  # System and process utilities for memory monitoring
 
+# Token Management & Date Utilities
+tiktoken==0.12.0  # Token counting for context management
+python-dateutil==2.8.2  # Enhanced date/time parsing
+
 # ============================================================================

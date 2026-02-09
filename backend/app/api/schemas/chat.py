@@ -43,17 +43,27 @@ class ChatMessageResponse(BaseModel):
     Attributes:
         response: Agent's response text
         session_id: Session ID for this conversation
-        agent_used: Name of the agent that processed the request
+        intent: Classified intent type (risk_assessment, incident_response, etc.)
+        agent_used: Name of the primary agent that processed the request (deprecated, use agents_used)
+        agents_used: List of agents used (for multi-agent responses)
         confidence: Confidence score of the response (0.0-1.0)
         sources: List of sources used for the response
+        suggestions: List of suggested follow-up questions
     """
 
     response: str = Field(..., description="Agent's response text")
     session_id: str = Field(..., description="Session ID for this conversation")
-    agent_used: str = Field(..., description="Name of agent that processed the request")
+    intent: str = Field(..., description="Classified intent type")
+    agent_used: str | None = Field(None, description="Primary agent (deprecated, use agents_used)")
+    agents_used: list[str] = Field(
+        default_factory=list, description="List of agents used for multi-agent responses"
+    )
     confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score (0.0-1.0)")
-    sources: list[dict[str, Any]] = Field(
+    sources: list[str] = Field(
         default_factory=list, description="Sources used for response"
+    )
+    suggestions: list[str] = Field(
+        default_factory=list, description="Suggested follow-up questions"
     )
 
 
@@ -85,3 +95,65 @@ class ChatSessionList(BaseModel):
     """
 
     sessions: list[ChatSession] = Field(default_factory=list, description="List of chat sessions")
+
+
+class CreateSessionRequest(BaseModel):
+    """
+    Request schema for creating a new chat session.
+    
+    Attributes:
+        user_id: User identifier
+        context: Optional initial context for the session
+    """
+    
+    user_id: str = Field(..., description="User identifier")
+    context: dict[str, Any] = Field(default_factory=dict, description="Optional initial context")
+
+
+class CreateSessionResponse(BaseModel):
+    """
+    Response schema for session creation.
+    
+    Attributes:
+        session_id: Created session identifier
+        created_at: Session creation timestamp
+    """
+    
+    session_id: str = Field(..., description="Created session identifier")
+    created_at: str = Field(..., description="Session creation timestamp (ISO format)")
+
+
+class ChatHistoryMessage(BaseModel):
+    """
+    Individual message in chat history.
+    
+    Attributes:
+        id: Message unique identifier
+        role: Message role (user, assistant, system)
+        content: Message content
+        timestamp: Message timestamp
+        agent_used: Agent that generated the message (for assistant messages)
+        metadata: Additional metadata (confidence, sources, etc.)
+    """
+    
+    id: str = Field(..., description="Message unique identifier")
+    role: str = Field(..., description="Message role (user, assistant, system)")
+    content: str = Field(..., description="Message content")
+    timestamp: str = Field(..., description="Message timestamp (ISO format)")
+    agent_used: str | None = Field(None, description="Agent used (assistant messages only)")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="Additional metadata"
+    )
+
+
+class DeleteSessionResponse(BaseModel):
+    """
+    Response schema for session deletion.
+    
+    Attributes:
+        success: Whether deletion was successful
+        message: Status message
+    """
+    
+    success: bool = Field(..., description="Whether deletion was successful")
+    message: str = Field(..., description="Status message")

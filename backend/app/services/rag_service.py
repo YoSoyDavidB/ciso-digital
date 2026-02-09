@@ -64,11 +64,28 @@ When answering:
 
 Always base your answers on the provided context when available."""
 
+    async def create_embedding(self, text: str) -> list[float]:
+        """
+        Crea embedding para un texto dado.
+
+        Args:
+            text: Texto para el cual crear embedding
+
+        Returns:
+            Lista de floats representando el vector embedding
+
+        Example:
+            >>> embedding = await rag_service.create_embedding("Hello world")
+            >>> print(len(embedding))  # 1536 para text-embedding-3-small
+        """
+        return await self.embedding_service.embed(text)
+
     async def search(
         self,
         query: str,
         limit: int = 10,
         filters: dict[str, Any] | None = None,
+        collection_name: str | None = None,
     ) -> list[dict[str, Any]]:
         """
         Busca documentos similares al query en la base vectorial.
@@ -77,6 +94,7 @@ Always base your answers on the provided context when available."""
             query: Pregunta o texto de búsqueda
             limit: Número máximo de resultados (default: 10, max: 100)
             filters: Filtros opcionales de metadata
+            collection_name: Nombre de la colección (opcional, usa default)
 
         Returns:
             Lista de documentos con score y metadata
@@ -99,6 +117,7 @@ Always base your answers on the provided context when available."""
         query_embedding = await self.embedding_service.embed(query)
 
         # 2. Buscar documentos similares
+        # TODO: Pasar collection_name al vector_store_service cuando lo soporte
         results = await self.vector_store_service.search_similar(
             query_vector=query_embedding,
             limit=limit,

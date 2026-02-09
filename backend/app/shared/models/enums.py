@@ -70,3 +70,75 @@ class RiskCategory(str, Enum):
     TECHNICAL = "technical"
     OPERATIONAL = "operational"
     COMPLIANCE = "compliance"
+
+
+# ============================================================================
+# INCIDENT RESPONSE ENUMS
+# ============================================================================
+
+class IncidentType(str, Enum):
+    """
+    Tipos de incidentes de seguridad siguiendo categorías NIST CSF.
+
+    Attributes:
+        MALWARE: Infección por software malicioso
+        PHISHING: Intento de phishing o ingeniería social
+        DATA_BREACH: Filtración o acceso no autorizado a datos
+        DDOS: Ataque de denegación de servicio distribuido
+        UNAUTHORIZED_ACCESS: Acceso no autorizado a sistemas
+        INSIDER_THREAT: Amenaza interna por empleado o contratista
+        RANSOMWARE: Ataque de ransomware o cifrado de datos
+        UNKNOWN: Tipo de incidente aún no clasificado
+        OTHER: Otro tipo de incidente no categorizado
+    """
+
+    MALWARE = "malware"
+    PHISHING = "phishing"
+    DATA_BREACH = "data_breach"
+    DDOS = "ddos"
+    UNAUTHORIZED_ACCESS = "unauthorized_access"
+    INSIDER_THREAT = "insider_threat"
+    RANSOMWARE = "ransomware"
+    UNKNOWN = "unknown"
+    OTHER = "other"
+
+
+class IncidentSeverity(str, Enum):
+    """
+    Niveles de severidad para incidentes de seguridad.
+
+    Attributes:
+        CRITICAL: Amenaza inmediata a operaciones críticas, requiere respuesta inmediata
+        HIGH: Impacto significativo, sistemas productivos afectados
+        MEDIUM: Impacto limitado, sistemas no críticos, amenaza contenida
+        LOW: Impacto mínimo, actividad sospechosa, potencial falso positivo
+    """
+
+    CRITICAL = "critical"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class IncidentStatus(str, Enum):
+    """
+    Estados del ciclo de vida de un incidente siguiendo NIST SP 800-61.
+
+    El flujo típico es:
+    DETECTED → INVESTIGATING → CONTAINED → ERADICATED → RECOVERED → CLOSED
+
+    Attributes:
+        DETECTED: Incidente detectado inicialmente
+        INVESTIGATING: Bajo investigación para determinar alcance
+        CONTAINED: Amenaza contenida, daño limitado
+        ERADICATED: Amenaza erradicada del entorno
+        RECOVERED: Sistemas restaurados a operación normal
+        CLOSED: Incidente cerrado con análisis post-mortem completo
+    """
+
+    DETECTED = "detected"
+    INVESTIGATING = "investigating"
+    CONTAINED = "contained"
+    ERADICATED = "eradicated"
+    RECOVERED = "recovered"
+    CLOSED = "closed"

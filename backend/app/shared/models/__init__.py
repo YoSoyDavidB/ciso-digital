@@ -15,9 +15,17 @@ Contenido:
 - RiskLikelihood → Enum para probabilidad de riesgos
 - RiskStatus    → Enum para estado de riesgos
 - RiskCategory  → Enum para categoría de riesgos
+- ConversationSession → Modelo de sesiones de conversación
+- ConversationMessage → Modelo de mensajes de conversación
+- MessageRole   → Enum para roles de mensajes
+- Incident      → Modelo de incidentes de seguridad
+- IncidentType  → Enum para tipos de incidentes
+- IncidentSeverity → Enum para severidad de incidentes
+- IncidentStatus → Enum para estado del ciclo de vida de incidentes
 
 Ejemplo de uso:
     from app.shared.models import Base, TimestampMixin, Risk, RiskSeverity
+    from app.shared.models import Incident, IncidentType
 
     class MyModel(Base, TimestampMixin):
         __tablename__ = "my_models"
@@ -27,12 +35,21 @@ Ejemplo de uso:
 
 from app.shared.models.base import Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
 from app.shared.models.enums import (
+    IncidentSeverity,
+    IncidentStatus,
+    IncidentType,
     RiskCategory,
     RiskLikelihood,
     RiskSeverity,
     RiskStatus,
 )
 from app.shared.models.risk import Risk
+from app.shared.models.conversation import (
+    ConversationSession,
+    ConversationMessage,
+    MessageRole,
+)
+from app.features.incident_response.models.incident import Incident
 
 
 __all__ = [
@@ -45,4 +62,11 @@ __all__ = [
     "RiskLikelihood",
     "RiskStatus",
     "RiskCategory",
+    "ConversationSession",
+    "ConversationMessage",
+    "MessageRole",
+    "Incident",
+    "IncidentType",
+    "IncidentSeverity",
+    "IncidentStatus",
 ]

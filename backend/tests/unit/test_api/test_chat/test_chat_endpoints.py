@@ -394,3 +394,297 @@ class TestChatSessions:
 
             assert isinstance(data, list)
             assert len(data) == 0
+
+
+# ============================================================================
+# TEST: POST /api/v1/chat/message - Integration with CISOOrchestrator
+# ============================================================================
+
+
+class TestChatMessageWithOrchestrator:
+    """Tests for chat message endpoint with CISOOrchestrator integration."""
+
+    @pytest.mark.asyncio
+    async def test_send_message_uses_orchestrator_instead_of_direct_agent(
+        self, async_client: AsyncClient, sample_chat_message_no_context
+    ):
+        """
+        🔴 RED: POST /api/v1/chat/message should use CISOOrchestrator.process_request().
+        
+        Given: Valid chat message
+        When: POST request sent to /api/v1/chat/message
+        Then: CISOOrchestrator.process_request() is called instead of direct agent
+        """
+        from app.schemas.orchestrator import OrchestratorResponse
+        
+        mock_orchestrator_response = OrchestratorResponse(
+            response_text="This is a response from the orchestrator",
+            intent_type="general_query",
+            confidence=0.88,
+            session_id="test-session-123",
+            agent_used="DirectResponse",
+            sources=["https://example.com/security-guide"],
+            requires_clarification=False
+        )
+        
+        with patch("app.api.routes.chat.CISOOrchestrator") as mock_orchestrator_class:
+            mock_orchestrator = AsyncMock()
+            mock_orchestrator.process_request.return_value = mock_orchestrator_response
+            mock_orchestrator_class.return_value = mock_orchestrator
+            
+            response = await async_client.post("/api/v1/chat/message", json=sample_chat_message_no_context)
+            
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+            
+            # Verify orchestrator was called
+            mock_orchestrator.process_request.assert_called_once()
+            call_args = mock_orchestrator.process_request.call_args
+            assert call_args.kwargs["user_query"] == sample_chat_message_no_context["message"]
+            assert "session_id" in call_args.kwargs
+            assert "user_id" in call_args.kwargs
+            
+            # Verify response structure
+            assert data["response"] == "This is a response from the orchestrator"
+            assert data["intent"] == "general_query"
+            assert data["confidence"] == 0.88
+
+    @pytest.mark.asyncio
+    async def test_send_message_with_orchestrator_returns_enhanced_response(
+        self, async_client: AsyncClient, sample_chat_message_no_context
+    ):
+        """
+        🔴 RED: Response should include intent, agents_used, sources, and suggestions.
+        
+        Given: Chat message processed by orchestrator
+        When: Response returned
+        Then: Response includes intent, agents_used, sources, suggestions fields
+        """
+        from app.schemas.orchestrator import OrchestratorResponse
+        
+        mock_orchestrator_response = OrchestratorResponse(
+            response_text="Risk assessment complete for your infrastructure",
+            intent_type="risk_assessment",
+            confidence=0.95,
+            session_id="session-456",
+            agents_used=["RiskAssessmentAgent", "ThreatAgent"],
+            sources=[
+                "CVE-2025-1234",
+                "NIST 800-53 Control AC-2"
+            ],
+            requires_clarification=False,
+            agent_results={
+                "RiskAssessmentAgent": {"risk_score": 8.5},
+                "ThreatAgent": {"threat_level": "high"}
+            }
+        )
+        
+        with patch("app.api.routes.chat.CISOOrchestrator") as mock_orchestrator_class:
+            mock_orchestrator = AsyncMock()
+            mock_orchestrator.process_request.return_value = mock_orchestrator_response
+            mock_orchestrator_class.return_value = mock_orchestrator
+            
+            response = await async_client.post("/api/v1/chat/message", json=sample_chat_message_no_context)
+            
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+            
+            # Verify enhanced response structure
+            assert "intent" in data
+            assert data["intent"] == "risk_assessment"
+            
+            assert "agents_used" in data
+            assert isinstance(data["agents_used"], list)
+            assert len(data["agents_used"]) == 2
+            assert "RiskAssessmentAgent" in data["agents_used"]
+            
+            assert "sources" in data
+            assert isinstance(data["sources"], list)
+            assert len(data["sources"]) == 2
+            
+            assert "confidence" in data
+            assert data["confidence"] == 0.95
+            
+            # Suggestions are generated based on sources/recommendations
+            assert "suggestions" in data
+            assert isinstance(data["suggestions"], list)
+
+
+# ============================================================================
+# TEST: GET /api/v1/chat/sessions/{session_id}/history
+# ============================================================================
+
+
+class TestChatSessionHistory:
+    """Tests for chat session history endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_get_session_history_returns_messages(self, async_client: AsyncClient):
+        """
+        🔴 RED: GET /api/v1/chat/sessions/{session_id}/history should return messages.
+        
+        Given: Session exists with multiple messages
+        When: GET request sent to /api/v1/chat/sessions/{session_id}/history
+        Then: Returns 200 with list of messages in chronological order
+        """
+        session_id = str(uuid.uuid4())
+        
+        mock_history = [
+            {
+                "id": str(uuid.uuid4()),
+                "role": "user",
+                "content": "What are the critical risks?",
+                "timestamp": "2026-02-06T10:00:00Z",
+                "agent_used": None
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "role": "assistant",
+                "content": "Based on analysis, there are 3 critical risks...",
+                "timestamp": "2026-02-06T10:00:05Z",
+                "agent_used": "RiskAssessmentAgent"
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "role": "user",
+                "content": "What should I prioritize?",
+                "timestamp": "2026-02-06T10:01:00Z",
+                "agent_used": None
+            }
+        ]
+        
+        with patch("app.api.routes.chat.get_session_history", return_value=mock_history):
+            response = await async_client.get(f"/api/v1/chat/sessions/{session_id}/history")
+            
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+            
+            assert isinstance(data, list)
+            assert len(data) == 3
+            
+            # Verify message structure
+            assert data[0]["role"] == "user"
+            assert data[1]["role"] == "assistant"
+            assert "content" in data[0]
+            assert "timestamp" in data[0]
+            
+            # Verify assistant message has agent_used
+            assert data[1]["agent_used"] == "RiskAssessmentAgent"
+
+    @pytest.mark.asyncio
+    async def test_get_session_history_with_invalid_session_returns_404(self, async_client: AsyncClient):
+        """
+        🔴 RED: Invalid session_id should return 404.
+        
+        Given: Session does not exist
+        When: GET request sent
+        Then: Returns 404 Not Found
+        """
+        session_id = "invalid-session-999"
+        
+        with patch("app.api.routes.chat.get_session_history", return_value=None):
+            response = await async_client.get(f"/api/v1/chat/sessions/{session_id}/history")
+            
+            assert response.status_code == status.HTTP_404_NOT_FOUND
+            data = response.json()
+            assert "detail" in data
+            assert "session" in data["detail"].lower() or "not found" in data["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_get_session_history_returns_empty_list_for_new_session(self, async_client: AsyncClient):
+        """
+        🔴 RED: New session with no messages should return empty list.
+        
+        Given: Session exists but has no messages
+        When: GET request sent
+        Then: Returns 200 with empty list
+        """
+        session_id = str(uuid.uuid4())
+        
+        with patch("app.api.routes.chat.get_session_history", return_value=[]):
+            response = await async_client.get(f"/api/v1/chat/sessions/{session_id}/history")
+            
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+            
+            assert isinstance(data, list)
+            assert len(data) == 0
+
+
+# ============================================================================
+# TEST: DELETE /api/v1/chat/sessions/{session_id}
+# ============================================================================
+
+
+class TestDeleteChatSession:
+    """Tests for deleting chat sessions."""
+
+    @pytest.mark.asyncio
+    async def test_delete_session_removes_session_successfully(self, async_client: AsyncClient):
+        """
+        🔴 RED: DELETE /api/v1/chat/sessions/{session_id} should delete session.
+        
+        Given: Session exists
+        When: DELETE request sent
+        Then: Returns 204 No Content and session is deleted
+        """
+        session_id = str(uuid.uuid4())
+        
+        with patch("app.api.routes.chat.delete_session") as mock_delete:
+            mock_delete.return_value = True  # Success
+            
+            response = await async_client.delete(f"/api/v1/chat/sessions/{session_id}")
+            
+            assert response.status_code == status.HTTP_204_NO_CONTENT
+            
+            # Verify delete was called
+            mock_delete.assert_called_once_with(session_id)
+
+    @pytest.mark.asyncio
+    async def test_delete_session_with_invalid_session_returns_404(self, async_client: AsyncClient):
+        """
+        🔴 RED: Deleting non-existent session should return 404.
+        
+        Given: Session does not exist
+        When: DELETE request sent
+        Then: Returns 404 Not Found
+        """
+        session_id = "invalid-session-999"
+        
+        with patch("app.api.routes.chat.delete_session") as mock_delete:
+            mock_delete.return_value = False  # Session not found
+            
+            response = await async_client.delete(f"/api/v1/chat/sessions/{session_id}")
+            
+            assert response.status_code == status.HTTP_404_NOT_FOUND
+            data = response.json()
+            assert "detail" in data
+
+    @pytest.mark.asyncio
+    async def test_delete_session_removes_all_messages(self, async_client: AsyncClient):
+        """
+        🔴 RED: Deleting session should cascade delete all messages.
+        
+        Given: Session with multiple messages exists
+        When: DELETE request sent
+        Then: Session and all messages are deleted
+        """
+        session_id = str(uuid.uuid4())
+        
+        with patch("app.api.routes.chat.delete_session") as mock_delete:
+            mock_delete.return_value = True
+            
+            # Create session with messages first
+            with patch("app.api.routes.chat.get_session_history") as mock_history:
+                mock_history.return_value = [{"id": "msg-1"}, {"id": "msg-2"}]
+                
+                # Verify session has messages before deletion
+                history_response = await async_client.get(f"/api/v1/chat/sessions/{session_id}/history")
+                assert len(history_response.json()) == 2
+                
+                # Delete session
+                delete_response = await async_client.delete(f"/api/v1/chat/sessions/{session_id}")
+                assert delete_response.status_code == status.HTTP_204_NO_CONTENT
+                
+                # Verify delete was called (messages cascade deleted in DB)
+                mock_delete.assert_called_once_with(session_id)

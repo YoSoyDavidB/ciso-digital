@@ -6,12 +6,23 @@ Este script:
 1. Lee documentos markdown de knowledge-base/
 2. Divide documentos en chunks con overlap
 3. Genera embeddings para cada chunk
-4. Guarda en Qdrant collection "security_knowledge"
+4. Guarda en Qdrant collection especificada
 
 Uso:
+    # Colección por defecto (security_knowledge)
     python scripts/seed_knowledge_base.py
-    python scripts/seed_knowledge_base.py --reset  # Resetea la colección primero
+    
+    # Resetear colección antes de sembrar
+    python scripts/seed_knowledge_base.py --reset
+    
+    # Sembrar un archivo específico
     python scripts/seed_knowledge_base.py --file knowledge-base/iso27001-overview.md
+    
+    # Sembrar playbooks en colección incident_playbooks
+    python scripts/seed_knowledge_base.py --collection incident_playbooks --directory knowledge-base/playbooks/
+    
+    # Resetear y sembrar playbooks
+    python scripts/seed_knowledge_base.py --collection incident_playbooks --directory knowledge-base/playbooks/ --reset
 """
 
 import argparse
@@ -135,9 +146,11 @@ def extract_metadata(filepath: Path) -> dict[str, Any]:
     document_type = "general"
     if "iso" in stem.lower() or "standard" in stem.lower():
         document_type = "standard"
+    elif "playbook" in stem.lower():
+        document_type = "playbook"
     elif "risk" in stem.lower():
         document_type = "risk-management"
-    elif "incident" in stem.lower():
+    elif "incident" in stem.lower() and "playbook" not in stem.lower():
         document_type = "incident-response"
     elif "guide" in stem.lower():
         document_type = "guide"
@@ -259,6 +272,7 @@ async def seed_knowledge_base(
     specific_file: Path | None = None,
     chunk_size: int = 1000,
     overlap: int = 200,
+    collection_name: str = "security_knowledge",
 ) -> dict[str, int]:
     """
     Popular la base de conocimiento completa.
@@ -269,6 +283,7 @@ async def seed_knowledge_base(
         specific_file: Si se especifica, solo ingesta este archivo
         chunk_size: Tamaño de chunks en caracteres
         overlap: Overlap entre chunks
+        collection_name: Nombre de la colección en Qdrant (default: security_knowledge)
 
     Returns:
         Dict con estadísticas de ingesta
@@ -282,6 +297,8 @@ async def seed_knowledge_base(
     """
     logger.info("=" * 60)
     logger.info("🚀 Starting Knowledge Base Seeding")
+    logger.info(f"📁 Collection: {collection_name}")
+    logger.info(f"📂 Directory: {knowledge_base_dir}")
     logger.info("=" * 60)
 
     # Inicializar servicios
@@ -290,7 +307,7 @@ async def seed_knowledge_base(
     vector_store = VectorStoreService(
         qdrant_url=settings.QDRANT_URL,
         api_key=settings.QDRANT_API_KEY,
-        collection_name="security_knowledge",
+        collection_name=collection_name,
     )
 
     # Determinar dimensión de embeddings
@@ -300,12 +317,12 @@ async def seed_knowledge_base(
 
     # Resetear colección si se solicita
     if reset:
-        logger.warning("⚠️  Resetting collection 'security_knowledge'...")
+        logger.warning(f"⚠️  Resetting collection '{collection_name}'...")
         try:
             # Verificar si existe
-            exists = await vector_store.client.collection_exists("security_knowledge")
+            exists = await vector_store.client.collection_exists(collection_name)
             if exists:
-                await vector_store.client.delete_collection("security_knowledge")
+                await vector_store.client.delete_collection(collection_name)
                 logger.info("✅ Collection deleted")
         except Exception as e:
             logger.warning(f"Could not delete collection: {e}")
@@ -414,6 +431,17 @@ def main():
         help="Overlap between chunks in characters (default: 200)",
     )
     parser.add_argument(
+        "--collection",
+        type=str,
+        default="security_knowledge",
+        help="Qdrant collection name (default: security_knowledge, also: incident_playbooks)",
+    )
+    parser.add_argument(
+        "--directory",
+        type=Path,
+        help="Specific directory to seed (e.g., knowledge-base/playbooks/)",
+    )
+    parser.add_argument(
         "--kb-dir",
         type=Path,
         default=Path(__file__).parent.parent.parent / "knowledge-base",
@@ -431,20 +459,29 @@ def main():
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
+    # Determinar directorio de trabajo
+    if args.directory:
+        # Directorio específico proporcionado
+        work_dir = args.directory if args.directory.is_absolute() else args.kb_dir / args.directory
+    else:
+        # Usar directorio de knowledge base por defecto
+        work_dir = args.kb_dir
+
     # Validar directorio
-    if not args.kb_dir.exists():
-        logger.error(f"Knowledge base directory not found: {args.kb_dir}")
+    if not work_dir.exists():
+        logger.error(f"Directory not found: {work_dir}")
         sys.exit(1)
 
     # Ejecutar seeding
     try:
         stats = asyncio.run(
             seed_knowledge_base(
-                knowledge_base_dir=args.kb_dir,
+                knowledge_base_dir=work_dir,
                 reset=args.reset,
                 specific_file=args.file,
                 chunk_size=args.chunk_size,
                 overlap=args.overlap,
+                collection_name=args.collection,
             )
         )
 
